@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.Settings
 import android.media.AudioAttributes
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -47,9 +48,12 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val MAX_BACKUP_BYTES = 25 * 1024 * 1024
 
-        /** Yedeklerin otomatik yazıldığı klasör: <dahili depolama>/Documents/Kuran Mealleri Yedek */
-        private const val BACKUP_PARENT = "Documents"
-        private const val BACKUP_DIR = "Kuran Mealleri Yedek"
+        /** Yedeklerin otomatik yazıldığı klasör: <dahili depolama>/Backups/Kuran Mealleri Yedek (yoksa oluşturulur) */
+        private const val BACKUP_ROOT = "Backups"
+        private const val BACKUP_DIR = "Backups/Kuran Mealleri Yedek"
+        /** Eski sürümlerin kullandığı klasör: <dahili depolama>/Documents/Kuran Mealleri Yedek (içindeki eski yedekler temizlenir) */
+        private const val OLD_BACKUP_PARENT = "Documents"
+        private const val OLD_BACKUP_DIR = "Kuran Mealleri Yedek"
     }
 
     /** Yedek yükleme penceresini yedek klasöründe açar (SAF'ın başlangıç konumu). */
@@ -58,7 +62,7 @@ class MainActivity : AppCompatActivity() {
             super.createIntent(context, input).apply {
                 putExtra(
                     DocumentsContract.EXTRA_INITIAL_URI,
-                    Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADocuments%2FKuran%20Mealleri%20Yedek")
+                    Uri.parse("content://com.android.externalstorage.documents/document/primary%3ABackups%2FKuran%20Mealleri%20Yedek")
                 )
             }
     }
@@ -86,7 +90,16 @@ class MainActivity : AppCompatActivity() {
             if (granted) saveToBackupFolder(p.first, p.second) else saveWithPicker(p.first, p.second)
         }
 
-    /** Yedeği "Documents/Kuran Mealleri Yedek" klasörüne yazar; klasör yoksa oluşturulur. Başarısız olursa dosya penceresine döner. */
+    // Android 11+: "Tüm dosyalara erişim" ayar sayfasından dönünce yedeklemeye devam eder.
+    private val requestAllFiles =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val p = pendingFolderSave
+            pendingFolderSave = null
+            if (p == null) return@registerForActivityResult
+            if (hasBackupAccess()) saveToBackupFolder(p.first, p.second) else saveWithPicker(p.first, p.second)
+        }
+
+    /** Yedeği dahili depolamadaki "Backups/Kuran Mealleri Yedek" klasörüne yazar; klasör yoksa oluşturulur. Başarısız olursa dosya penceresine döner. */
     private fun saveToBackupFolder(json: String, fileName: String) {
         Thread {
             try {
@@ -102,91 +115,34 @@ class MainActivity : AppCompatActivity() {
     private fun isBackupName(name: String?): Boolean =
         name != null && Regex("^(kuranmealleri_yedek_|kuran_uygulamasi_yedek).*\\.json$", RegexOption.IGNORE_CASE).matches(name)
 
+    /** Dahili depolamaya (Backups/Kuran Mealleri Yedek klasörü) yazma erişimi var mı? Android 11+: "Tüm dosyalara erişim"; 10 ve altı: depolama izni. */
+    private fun hasBackupAccess(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+        else ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+
     /**
+     * Yedek, dahili depolamadaki "Backups/Kuran Mealleri Yedek" klasörüne yazılır (klasör yoksa oluşturulur).
      * Klasörde her zaman tek bir güncel yedek bulunur: aynı adlı dosya varsa üzerine yazılır,
-     * diğer tüm yedek dosyaları (farklı tarihli / eski adlı / "(1)" ekli) silinir.
+     * diğer tüm yedek dosyaları (farklı tarihli / eski adlı / "(1)" ekli, eski Documents klasöründekiler dahil) silinir.
      */
     private fun writeToBackupFolder(bytes: ByteArray, fileName: String): String {
-        val where = "$BACKUP_PARENT/$BACKUP_DIR"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            // Bu klasördeki mevcut yedekleri bul
-            val existing = ArrayList<Pair<Uri, String>>()
-            try {
-                contentResolver.query(
-                    collection,
-                    arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
-                    "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-                    arrayOf("$where/"),
-                    null
-                )?.use { c ->
-                    while (c.moveToNext()) {
-                        val name = c.getString(1)
-                        if (isBackupName(name)) {
-                            existing.add(android.content.ContentUris.withAppendedId(collection, c.getLong(0)) to name)
-                        }
-                    }
-                }
-            } catch (_: Exception) {
+        @Suppress("DEPRECATION")
+        val root = Environment.getExternalStorageDirectory()
+        val dir = File(root, BACKUP_DIR)
+        if (!dir.exists() && !dir.mkdirs() && !dir.exists()) throw IOException("Backups/Kuran Mealleri Yedek klasörü oluşturulamadı")
+        val f = File(dir, fileName)
+        f.writeBytes(bytes) // aynı ad varsa üzerine yazar (overwrite)
+        // Yazma başarılı oldu: eski yedekleri temizle
+        val touched = ArrayList<String>()
+        touched.add(f.absolutePath)
+        val oldDir = File(File(root, OLD_BACKUP_PARENT), OLD_BACKUP_DIR)
+        for (d in listOf(dir, File(root, BACKUP_ROOT), oldDir)) {
+            d.listFiles()?.forEach { o ->
+                if (o.isFile && o.absolutePath != f.absolutePath && isBackupName(o.name) && o.delete()) touched.add(o.absolutePath)
             }
-            val same = existing.firstOrNull { it.second == fileName }
-            val target: Uri
-            if (same != null) {
-                // Aynı adlı yedek var: üzerine yaz (overwrite)
-                target = same.first
-                try {
-                    contentResolver.openOutputStream(target, "wt")?.use { it.write(bytes) }
-                        ?: throw IOException("Dosya açılamadı")
-                } catch (e: Exception) {
-                    // Başka uygulamaya/kurulum'a ait dosya yazılamayabilir: sil ve yeniden oluştur
-                    try { contentResolver.delete(target, null, null) } catch (_: Exception) {}
-                    return writeNewBackup(collection, where, fileName, bytes, existing.filter { it.first != target })
-                }
-            } else {
-                return writeNewBackup(collection, where, fileName, bytes, existing)
-            }
-            // Eski/farklı adlı diğer yedekleri sil
-            for (o in existing) if (o.first != target) {
-                try { contentResolver.delete(o.first, null, null) } catch (_: Exception) {}
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), BACKUP_DIR)
-            if (!dir.exists() && !dir.mkdirs()) throw IOException("Klasör oluşturulamadı")
-            val f = File(dir, fileName)
-            f.writeBytes(bytes) // aynı ad varsa üzerine yazar
-            val removed = ArrayList<String>()
-            dir.listFiles()?.forEach { o ->
-                if (o.isFile && o.name != fileName && isBackupName(o.name) && o.delete()) removed.add(o.absolutePath)
-            }
-            MediaScannerConnection.scanFile(this, (removed + f.absolutePath).toTypedArray(), null, null)
         }
-        return where
-    }
-
-    /** Yeni yedek dosyasını oluşturur, ardından `old` listesindeki eski yedekleri siler (yazma başarısızsa eskiler korunur). */
-    private fun writeNewBackup(collection: Uri, where: String, fileName: String, bytes: ByteArray, old: List<Pair<Uri, String>>): String {
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-            put(MediaStore.MediaColumns.RELATIVE_PATH, where)
-            put(MediaStore.MediaColumns.IS_PENDING, 1)
-        }
-        val uri = contentResolver.insert(collection, values) ?: throw IOException("Dosya oluşturulamadı")
-        try {
-            contentResolver.openOutputStream(uri, "w")?.use { it.write(bytes) }
-                ?: throw IOException("Dosya açılamadı")
-            values.clear()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            contentResolver.update(uri, values, null, null)
-        } catch (e: Exception) {
-            contentResolver.delete(uri, null, null)
-            throw e
-        }
-        for (o in old) {
-            try { contentResolver.delete(o.first, null, null) } catch (_: Exception) {}
-        }
-        return where
+        MediaScannerConnection.scanFile(this, touched.toTypedArray(), null, null)
+        return BACKUP_DIR
     }
 
     /** Yedek klasörüne yazılamazsa sistemin dosya kaydetme penceresi açılır. */
@@ -507,24 +463,32 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
-        /** Yedek metnini "Documents/Kuran Mealleri Yedek" klasörüne .json dosyası olarak kaydeder (klasör otomatik oluşur). */
+        /** Yedek metnini dahili depolamadaki "Backups/Kuran Mealleri Yedek" klasörüne .json dosyası olarak kaydeder (klasör otomatik oluşur; tek güncel yedek tutulur). */
         @JavascriptInterface
         fun saveBackup(json: String, fileName: String) {
             val safe = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "kuranmealleri_yedek.json" }
             runOnUiThread {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
-                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED
-                ) {
+                if (hasBackupAccess()) {
+                    saveToBackupFolder(json, safe)
+                } else {
                     pendingFolderSave = json to safe
                     try {
-                        requestStorage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            // Android 11+: Backups klasörüne yazmak için "Tüm dosyalara erişim" izni (bir kez) gerekir
+                            val intent = try {
+                                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))
+                                    .also { it.resolveActivity(packageManager) ?: throw IllegalStateException() }
+                            } catch (e: Exception) {
+                                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                            }
+                            requestAllFiles.launch(intent)
+                        } else {
+                            requestStorage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        }
                     } catch (e: Exception) {
                         pendingFolderSave = null
                         saveWithPicker(json, safe)
                     }
-                } else {
-                    saveToBackupFolder(json, safe)
                 }
             }
         }
