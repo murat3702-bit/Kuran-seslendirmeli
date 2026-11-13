@@ -2,11 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- İnternet izni bilerek yok: uygulama tamamen çevrimdışı çalışır. -->
-    <!-- Yedekler "Documents/Kuran Mealleri Yedek" klasörüne yazılır. Android 10+ için izin gerekmez (MediaStore);
-         yalnızca Android 8-9'da ortak klasöre yazmak için aşağıdaki izin istenir. Verilmezse sistem dosya penceresi (SAF) açılır. -->
+    <!-- Yedekler dahili depolamanın "Backups/Kuran Mealleri Yedek" klasörüne yazılır (yoksa oluşturulur).
+         Android 11+: "Tüm dosyalara erişim" izni (ilk yedekte ayar sayfası açılır); Android 8-10: depolama izni.
+         İzin verilmezse sistem dosya penceresi (SAF) açılır. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <!-- Android 11+: cihazdaki konuşma (TTS) motorunu bulabilmek için gerekli. -->
     <queries>
@@ -17,6 +19,7 @@
 
     <application
         android:allowBackup="true"
+        android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
