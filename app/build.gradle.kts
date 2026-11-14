@@ -19,7 +19,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 2            // yapı (build) numarası
-        versionName = "52"
+        versionName = "53"
     }
 
     signingConfigs {
