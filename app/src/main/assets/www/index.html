@@ -169,6 +169,10 @@ svg.ic{display:block;flex:none}
 .num::before,.num::after{content:'';position:absolute;inset:7px;border:1.5px solid var(--gold);border-radius:4px}
 .num::after{transform:rotate(45deg)}
 .num b{position:relative;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.num.big{width:46px;height:46px;border-radius:14px;background:var(--brand-soft)}
+.num.big::before,.num.big::after{display:none}
+.num.big b{font-size:20px;line-height:1}
+.num.big i{position:absolute;right:-8px;bottom:-6px;min-width:22px;padding:0 5px;box-sizing:border-box;text-align:center;font-style:normal;font-size:11px;font-weight:600;line-height:16px;border-radius:9px;background:var(--surface);border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums}
 .row .rt{flex:1;min-width:0}
 .row .rn{display:block;font-family:var(--disp);font-size:17.5px;font-weight:600;line-height:1.2}
 .row .rs{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
@@ -1404,7 +1408,7 @@ function renderSur(){
     const f=fold(q).trim();
     let items=SUR.filter(s=>!f||s.f.includes(f)||String(s.n)===f);
     if(S.sortMode==='nuzul')items=items.slice().sort((a,b)=>NUZUL[a.n-1]-NUZUL[b.n-1]);
-    $('#slist').innerHTML=items.length?items.map(s=>`<button class="row" data-s="${s.n}"><span class="num"><b>${s.n}</b></span><span class="rt"><span class="rn"${headStyle()}>${s.name}</span>${s.t?`<span class="rs">${s.t}</span>`:''}</span><span class="rc">${s.v} ayet</span></button>`).join(''):`<div class="empty">Sonuç bulunamadı.</div>`;
+    $('#slist').innerHTML=items.length?items.map(s=>`<button class="row" data-s="${s.n}"><span class="num big" title="Nüzul sırası ${NUZUL[s.n-1]} · Mushaf sırası ${s.n}"><b>${S.sortMode==='nuzul'?NUZUL[s.n-1]:s.n}</b><i>${S.sortMode==='nuzul'?s.n:NUZUL[s.n-1]}</i></span><span class="rt"><span class="rn"${headStyle()}>${s.name}</span>${s.t?`<span class="rs">${s.t}</span>`:''}</span><span class="rc">${s.v} ayet</span></button>`).join(''):`<div class="empty">Sonuç bulunamadı.</div>`;
   };
   surDraw=draw;
   draw('');
@@ -3219,7 +3223,7 @@ function tbPillText(c){return c[1]===c[0]?'Ayet '+c[0]:(c[1]-c[0]===1?`Ayet ${c[
 function tbDrawList(){
   const f=fold($('#tbq').value||'').trim();
   const items=NUZUL_ORDER.filter(n=>!f||SUR[n-1].f.includes(f));
-  $('#tblbody').innerHTML=items.length?'<div class="list">'+items.map(n=>`<button class="row" data-s="${n}"><span class="num"><b>${NUZUL[n-1]}</b></span><span class="rt"><span class="rn"${headStyle()}>${SUR[n-1].name}</span>${SUR[n-1].t?`<span class="rs">${SUR[n-1].t}</span>`:''}</span><span class="rc">${SUR[n-1].v} ayet</span></button>`).join('')+'</div>':`<div class="empty">Sonuç bulunamadı.</div>`;
+  $('#tblbody').innerHTML=items.length?'<div class="list">'+items.map(n=>`<button class="row" data-s="${n}"><span class="num big" title="Nüzul sırası ${NUZUL[n-1]} · Mushaf sırası ${n}"><b>${NUZUL[n-1]}</b><i>${n}</i></span><span class="rt"><span class="rn"${headStyle()}>${SUR[n-1].name}</span>${SUR[n-1].t?`<span class="rs">${SUR[n-1].t}</span>`:''}</span><span class="rc">${SUR[n-1].v} ayet</span></button>`).join('')+'</div>':`<div class="empty">Sonuç bulunamadı.</div>`;
 }
 function tbOpenList(){
   $('#tblist').classList.add('on');
