@@ -21,7 +21,7 @@ Veriler yalnızca telefonda saklanır; *Yedekle / geri yükle* ile kopyalayıp b
 Uygulama verisi silinirse (Ayarlar → Uygulamalar → Depolamayı temizle) yönetici verilerin de gider; önce yedek al.
 
 ## Bilmen gerekenler
-- Paket adı: `com.mb.seslikuran.app` (sürüm 49, yapı/kod 2). Debug ve release aynı paket adını kullanır; eski `com.mb.Kuranix` / `com.mb.Kuranix.yeni` uygulamalarından ayrı, yeni bir uygulama olarak kurulur.
+- Paket adı: `com.mb.seslikuran.app` (sürüm 50, yapı/kod 2). Debug ve release aynı paket adını kullanır; eski `com.mb.Kuranix` / `com.mb.Kuranix.yeni` uygulamalarından ayrı, yeni bir uygulama olarak kurulur.
 - Mevcut uygulamanın üzerine güncelleme olarak kurmak için release derlemesini **orijinal anahtar dosyanla (keystore)** imzalaman gerekir. `keystore.properties` dosyası oluştur:
   ```
   storeFile=anahtar.jks
@@ -135,3 +135,5 @@ Uygulama verisi silinirse (Ayarlar → Uygulamalar → Depolamayı temizle) yön
 
 
 > Not: Kaldırılan fontları (Coronet, Lato, Glametrix, Merriweather, Bariol Serif, Cantarell vb.) seçmiş eski kayıtlar otomatik olarak Libre Baskerville'e döner.
+
+> Sure listelerinde (Sûreler ve Tebyin listesi) büyük numara seçili sıralamayı (Nüzul/Mushaf), küçük rozet ise diğer sıra numarasını gösterir.
